@@ -1,0 +1,77 @@
+# Crear el archivo deploy.yml
+cat > .github/workflows/deploy.yml << 'EOF'
+name: CI/CD con Terraform y LocalStack 3.0
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Iniciar LocalStack 3.0
+        run: |
+          docker run -d \
+            --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=s3,dynamodb \
+            -e AWS_ACCESS_KEY_ID=test \
+            -e AWS_SECRET_ACCESS_KEY=test \
+            -e DEFAULT_REGION=us-east-1 \
+            localstack/localstack:3.0
+          
+          echo "Esperando LocalStack 3.0..."
+          for i in {1..30}; do
+            if curl -s http://localhost:4566/_localstack/health 2>/dev/null | grep -q "available"; then
+              echo "✅ LocalStack listo"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Init
+        run: terraform init
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Terraform Plan
+        run: terraform plan
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Mostrar Outputs
+        run: terraform output
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+
+      - name: Verificar éxito
+        run: echo "✅ Despliegue completado en LocalStack 3.0"
+
+      - name: Limpiar
+        if: always()
+        run: |
+          docker stop localstack
+          docker rm localstack
+EOF
