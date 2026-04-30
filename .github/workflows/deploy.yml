@@ -1,12 +1,96 @@
-name: Test Workflow
+name: Terraform with LocalStack 3.0
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
-  test:
+  terraform:
+    name: Deploy Infrastructure
     runs-on: ubuntu-latest
+    
     steps:
-      - run: echo "El workflow está funcionando!"
-      - run: ls -la
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start LocalStack 3.0
+        run: |
+          docker run -d \
+            --name localstack \
+            -p 4566:4566 \
+            -e SERVICES=s3,dynamodb \
+            -e AWS_ACCESS_KEY_ID=test \
+            -e AWS_SECRET_ACCESS_KEY=test \
+            -e DEFAULT_REGION=us-east-1 \
+            localstack/localstack:3.0
+          
+          echo "Waiting for LocalStack to be ready..."
+          for i in {1..40}; do
+            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3":"available"'; then
+              echo "LocalStack is ready!"
+              break
+            fi
+            echo "Attempt $i/40 - Waiting..."
+            sleep 3
+          done
+          
+          echo "LocalStack health status:"
+          curl -s http://localhost:4566/_localstack/health
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+      
+      - name: Terraform Init
+        run: terraform init
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+      
+      - name: Terraform Validate
+        run: terraform validate
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+      
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        continue-on-error: false
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+      
+      - name: Show Outputs
+        run: terraform output
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+      
+      - name: Verify Resources
+        run: |
+          echo "========================================="
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "========================================="
+          echo ""
+          echo "Resources created in LocalStack 3.0:"
+          echo ""
+          curl -s http://localhost:4566/_localstack/health | grep -E "s3|dynamodb" || echo "Health check done"
+          echo ""
+          echo "Stack outputs:"
+          terraform output
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop localstack || true
+          docker rm localstack || true
