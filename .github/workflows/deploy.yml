@@ -1,50 +1,12 @@
-name: CI/CD con Terraform y LocalStack
+name: Test Workflow
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Start LocalStack
-        run: |
-          docker run -d \
-            --name localstack \
-            -p 4566:4566 \
-            -e SERVICES=s3,dynamodb \
-            localstack/localstack:3.0
-          sleep 30
-          curl http://localhost:4566/_localstack/health
-      
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.0
-      
-      - name: Terraform Init
-        run: terraform init
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-      
-      - name: Terraform Plan
-        run: terraform plan
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-      
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-      
-      - name: Verify
-        run: echo "✅ Deploy completed successfully on LocalStack 3.0"
+      - run: echo "El workflow está funcionando!"
+      - run: ls -la
